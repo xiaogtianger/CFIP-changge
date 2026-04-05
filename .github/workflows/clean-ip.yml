@@ -1,12 +1,12 @@
-name: Clean IP List from yxip (Every 3 Days)
+name: Clean & Filter IP List (HK JP KR SG only)
 
 on:
   schedule:
-    - cron: '0 0 */3 * *'      # 每3天运行一次（UTC时间）
-  workflow_dispatch:           # 允许手动触发
+    - cron: '0 0 */3 * *'      # 每 3 天运行一次（UTC 0:00）
+  workflow_dispatch:           # 支持手动触发
 
 jobs:
-  clean-ip:
+  filter-ip:
     runs-on: ubuntu-latest
 
     permissions:
@@ -16,17 +16,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main                # 如果你的默认分支是 master，请改成 master
+          ref: main                # 如果你的默认分支是 master，请改为 master
 
-      - name: 下载并清理 IP 列表
+      - name: 下载并过滤 IP（仅保留 HK JP KR SG）
         run: |
           echo "开始下载原始 IP 文件..."
           curl -s https://raw.githubusercontent.com/chris202010/yxip/refs/heads/main/ip.txt -o raw-ip.txt
 
-          echo "开始清理 IP 格式..."
-          > clean-ip.txt
+          echo "开始清理并过滤（仅保留 #HK #JP #KR #SG）..."
+
+          > filtered-ip.txt
 
           while IFS= read -r line || [[ -n $line ]]; do
+            # 去除首尾空白
             line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             if [[ -z "$line" ]]; then
               continue
@@ -35,7 +37,7 @@ jobs:
             # 提取 IP:端口
             ip_port=$(echo "$line" | cut -d'#' -f1 | sed 's/[[:space:]]*$//')
 
-            # 提取地区标识（支持 #DE|官方优选|175ms 这种格式）
+            # 提取地区标识（支持多种脏格式）
             if [[ "$line" == *#* ]]; then
               region_part=$(echo "$line" | cut -d'#' -f2- | cut -d'|' -f1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
               region=$(echo "$region_part" | cut -d'#' -f1 | sed 's/[[:space:]]*$//')
@@ -43,28 +45,32 @@ jobs:
               region=""
             fi
 
+            # 只保留指定地区（不区分大小写）
             if [[ -n "$region" ]]; then
-              echo "${ip_port}#${region}" >> clean-ip.txt
-            else
-              echo "${ip_port}" >> clean-ip.txt
+              region_upper=$(echo "$region" | tr '[:lower:]' '[:upper:]')
+              if [[ "$region_upper" == "HK" || "$region_upper" == "JP" || 
+                    "$region_upper" == "KR" || "$region_upper" == "SG" ]]; then
+                echo "${ip_port}#${region}" >> filtered-ip.txt
+              fi
             fi
           done < raw-ip.txt
 
-          echo "清理完成！共处理 $(wc -l < clean-ip.txt) 行。"
-          echo "前5行预览："
-          head -n 5 clean-ip.txt
+          total=$(wc -l < filtered-ip.txt)
+          echo "过滤完成！共保留 $total 行符合条件的 IP（HK/JP/KR/SG）。"
+          echo "前 10 行预览："
+          head -n 10 filtered-ip.txt || echo "没有符合条件的 IP"
 
-      - name: 提交并推送清理后的 IP 文件
+      - name: 提交并推送过滤后的 IP 文件
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add clean-ip.txt
+          git add filtered-ip.txt
 
           if git diff --staged --quiet; then
             echo "文件没有变化，跳过提交。"
           else
-            git commit -m "chore: update cleaned ip list $(date +'%Y-%m-%d')"
+            git commit -m "chore: update filtered ip list (HK JP KR SG only) $(date +'%Y-%m-%d')"
             git push
-            echo "✅ 清理后的 IP 文件已成功推送！"
+            echo "✅ 过滤后的 IP 文件（filtered-ip.txt）已成功推送！"
           fi
