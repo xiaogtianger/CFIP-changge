@@ -1,7 +1,9 @@
 name: Clean & Filter IP List (Pure HK JP KR SG)
 
 on:
-  workflow_dispatch:           # 只保留手动触发
+  schedule:
+    - cron: '0 0 * * 0'        # 每周日 UTC 00:00 运行一次（即一周一次）
+  workflow_dispatch:           # 同时支持手动触发
 
 jobs:
   filter-ip:
@@ -14,7 +16,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main                 # 如果你的默认分支是 master，请改成 master
+          ref: main                 # 如果你的默认分支是 master，请改为 master
 
       - name: 下载并生成最干净的 IP 列表（纯 #HK #JP #KR #SG）
         run: |
