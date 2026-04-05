@@ -1,9 +1,7 @@
-name: Clean & Filter IP List (Only HK JP KR SG - Pure)
+name: Clean & Filter IP List (Pure HK JP KR SG)
 
 on:
-  schedule:
-    - cron: '0 0 */3 * *'      # 每 3 天运行一次
-  workflow_dispatch:
+  workflow_dispatch:           # 只保留手动触发
 
 jobs:
   filter-ip:
@@ -16,7 +14,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: main                 # 如果你的默认分支是 master，请改成 master
 
       - name: 下载并生成最干净的 IP 列表（纯 #HK #JP #KR #SG）
         run: |
@@ -35,10 +33,9 @@ jobs:
             # 提取 IP:端口
             ip_port=$(echo "$line" | cut -d'#' -f1 | sed 's/[[:space:]]*$//')
 
-            # 提取地区标识并清理（去掉 -数字 和后续内容）
+            # 提取地区标识并清理（去掉 -1、-20 等）
             if [[ "$line" == *#* ]]; then
               region_part=$(echo "$line" | cut -d'#' -f2- | cut -d'|' -f1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-              # 取第一个 # 前的内容，然后去掉 -数字（例如 HK-1 → HK，JP-20 → JP）
               region=$(echo "$region_part" | cut -d'#' -f1 | sed 's/-[0-9]*$//' | sed 's/[[:space:]]*$//')
             else
               region=""
@@ -49,7 +46,6 @@ jobs:
               region_upper=$(echo "$region" | tr '[:lower:]' '[:upper:]')
               if [[ "$region_upper" == *"HK"* || "$region_upper" == *"JP"* || 
                     "$region_upper" == *"KR"* || "$region_upper" == *"SG"* ]]; then
-                # 输出纯净格式：IP:端口#HK
                 echo "${ip_port}#${region_upper}" >> clean-ip.txt
                 count=$((count + 1))
               fi
@@ -74,7 +70,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "文件没有变化，跳过提交。"
           else
-            git commit -m "chore: update clean-ip.txt (pure #HK #JP #KR #SG) $(date +'%Y-%m-%d')"
+            git commit -m "chore: update clean-ip.txt (pure #HK #JP #KR #SG) $(date +'%Y-%m-%d %H:%M:%S')"
             git push
             echo "✅ clean-ip.txt 已更新为最干净格式并推送！"
           fi
