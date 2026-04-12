@@ -20,7 +20,7 @@ jobs:
       - name: 下载并生成最干净的 IP 列表（仅 JP KR SG）
         run: |
           echo "🔄 开始下载原始 IP 文件..."
-          curl -s -f -L https://raw.githubusercontent.com/chris202010/yxip/refs/heads/main/ip.txt -o raw-ip.txt || { echo "❌ 下载失败"; exit 1; }
+          curl -s -f -L https://raw.githubusercontent.com/chris202010/yxip/refs/heads/main/ip.txt || { echo "❌ 下载失败"; exit 1; }
 
           echo "🧹 开始清理并过滤（仅保留纯 JP KR SG）..."
 
