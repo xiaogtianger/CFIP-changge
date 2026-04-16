@@ -2,7 +2,7 @@ name: Clean & Filter IP List (Pure JP KR SG only)
 
 on:
   schedule:
-    0 0 */2 * *       # 每 2 天执行一次
+    - cron: '0 5 * * *'       # 每 天执行一次
   workflow_dispatch:           # 支持手动触发
 
 jobs:
