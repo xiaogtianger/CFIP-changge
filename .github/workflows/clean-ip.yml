@@ -1,4 +1,4 @@
-name: Clean & Filter IP List (Best 5 by Speed + Random 3 if no speed)
+name: Clean & Filter IP List (Best 5 by Speed or Random 3)
 
 on:
   schedule:
@@ -17,7 +17,7 @@ jobs:
         with:
           ref: main
 
-      - name: 下载并智能优选 IP（有延迟取5个，无延迟随机3个）
+      - name: 下载并智能优选 IP（有速度取5个，无速度随机3个）
         run: |
           echo "🚀 开始下载所有 IP 来源..."
 
@@ -46,7 +46,7 @@ jobs:
                 gsub(/-[0-9]+$/, "", region_part)
 
                 region = toupper(region_part)
-                if (region !~ /^(JP|KR|SG|HK|US)$/) next
+                if (region !~ /^(JP|KR|SG|HK|US|TW)$/) next
 
                 # 智能提取延迟
                 speed = 9999
@@ -66,47 +66,45 @@ jobs:
           # 全局去重，保留最优延迟
           sort -t'#' -k1,1 -k3,3n all_with_speed.txt | awk -F'#' '!seen[$1]++' > deduped.txt
 
-          echo "🎯 按国家智能优选 IP..."
+          echo "🎯 按地区智能优选 IP..."
 
           mkdir -p best-ips
           > best-ips/clean-ip.txt
           total=0
 
-          for country in JP KR SG HK US; do
+          for country in JP KR SG HK US TW; do
             grep "#$country#" deduped.txt > "${country}.txt" 2>/dev/null || true
             lines=$(wc -l < "${country}.txt" 2>/dev/null || echo 0)
 
             echo "📊 $country: 找到 $lines 个可用 IP"
 
             if [[ $lines -gt 0 ]]; then
-              # 判断是否有真实延迟数据
               has_speed=$(awk -F'#' '$3 < 9999' "${country}.txt" | wc -l)
 
               if [[ $has_speed -gt 0 ]]; then
-                # 有延迟 → 按速度排序取前5
+                # 有速度 → 取最快 5 个
                 sort -t'#' -k3,3n "${country}.txt" | head -n 5 >> best-ips/clean-ip.txt
                 taken=5
-                echo "   → 有延迟数据，取最快 5 个"
+                echo "   → 有测速数据，取最快 5 个"
               else
-                # 无延迟 → 随机取3个
+                # 无速度 → 随机取 3 个
                 if [[ $lines -le 3 ]]; then
                   cat "${country}.txt" >> best-ips/clean-ip.txt
                   taken=$lines
-                  echo "   → 无延迟数据，全部保留 $taken 个"
+                  echo "   → 无测速数据，全部保留 $taken 个"
                 else
                   shuf -n 3 "${country}.txt" >> best-ips/clean-ip.txt
                   taken=3
-                  echo "   → 无延迟数据，随机抽取 3 个"
+                  echo "   → 无测速数据，随机抽取 3 个"
                 fi
               fi
-
               total=$((total + taken))
             else
-              echo "   → 该国家暂无可用 IP"
+              echo "   → 该地区暂无可用 IP"
             fi
           done
 
-          # 清理最终格式
+          # 最终清理格式：IP:port#地区
           awk -F'#' '{print $1 "#" $2}' best-ips/clean-ip.txt > best-ips/clean-ip.txt.tmp
           mv best-ips/clean-ip.txt.tmp best-ips/clean-ip.txt
 
@@ -126,7 +124,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "📌 文件无变化，跳过提交。"
           else
-            git commit -m "chore: update best-ips/clean-ip.txt (smart 5 by speed or random 3) $(date +'%Y-%m-%d %H:%M:%S UTC')"
+            git commit -m "chore: update best-ips/clean-ip.txt (best 5 by speed or random 3 + TW) $(date +'%Y-%m-%d %H:%M:%S UTC')"
             git push
             echo "🎉 best-ips/clean-ip.txt 已更新并推送！"
           fi
