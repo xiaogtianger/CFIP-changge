@@ -1,14 +1,13 @@
-name: Clean & Filter IP List (Pure JP KR SG only)
+name: Clean & Filter IP List (Random 5 per Country - Total 20)
 
 on:
   schedule:
-    - cron: '0 5 * * *'       # 每 天执行一次
-  workflow_dispatch:           # 支持手动触发
+    - cron: '0 5 * * *'
+  workflow_dispatch:
 
 jobs:
   filter-ip:
     runs-on: ubuntu-latest
-
     permissions:
       contents: write
 
@@ -16,50 +15,78 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main                 # 如果你的默认分支是 master，请改为 master
+          ref: main
 
-      - name: 下载并生成最干净的 IP 列表（仅 JP KR SG）
+      - name: 下载并按国家随机提取 5 个 IP（共 20 个）
         run: |
-          echo "开始下载原始 IP 文件..."
-          curl -s -f -L https://raw.githubusercontent.com/chris202010/yxip/refs/heads/main/ip.txt -o raw-ip.txt || { echo "❌ 下载失败"; exit 1; }
+          echo "🚀 开始下载所有 IP 来源..."
 
-          echo "开始清理并过滤（仅保留纯 #JP #KR #SG）..."
+          # 下载四个来源
+          curl -s -f -L https://raw.githubusercontent.com/chris202010/yxip/refs/heads/main/ip.txt -o raw1.txt || true
+          curl -s -f -L https://raw.githubusercontent.com/zhangtaile/bestIP/refs/heads/main/ipinfo.txt -o raw2.txt || true
+          curl -s -f -L https://raw.githubusercontent.com/Fido6/bestip/refs/heads/dtaa/bestiphk.txt -o raw3.txt || true
+
+          echo "🔍 开始过滤并按国家分组..."
+
+          > all_filtered.txt
+
+          for file in raw*.txt; do
+            [ ! -s "$file" ] && continue
+            awk '
+              BEGIN { FS = "#"; OFS = "#" }
+              {
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+                if (NF == 0 || $0 == "") next
+
+                ip_port = $1
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", ip_port)
+
+                region_part = (NF >= 2) ? $2 : ""
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", region_part)
+                gsub(/\|.*/, "", region_part)
+                gsub(/-[0-9]+$/, "", region_part)
+
+                region = toupper(region_part)
+
+                if (region ~ /^(JP|KR|SG|HK)$/) {
+                  print ip_port "#" region
+                }
+              }
+            ' "$file" >> all_filtered.txt
+          done
+
+          echo "🎲 按国家随机抽取 5 个 IP（目标总数 20）..."
 
           > clean-ip.txt
-          count=0
+          total=0
 
-          while IFS= read -r line || [[ -n $line ]]; do
-            line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-            [[ -z "$line" ]] && continue
+          for country in JP KR SG HK; do
+            grep "#$country$" all_filtered.txt > "${country}.txt" 2>/dev/null || true
+            lines=$(wc -l < "${country}.txt" 2>/dev/null || echo 0)
+            
+            echo "📊 $country: 找到 $lines 个可用 IP"
 
-            # 提取 IP:端口
-            ip_port=$(echo "$line" | cut -d'#' -f1 | sed 's/[[:space:]]*$//')
-
-            # 提取地区标识并清理（去掉 -1、-20 等数字后缀）
-            if [[ "$line" == *#* ]]; then
-              region_part=$(echo "$line" | cut -d'#' -f2- | cut -d'|' -f1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-              region=$(echo "$region_part" | cut -d'#' -f1 | sed 's/-[0-9]*$//' | sed 's/[[:space:]]*$//')
-            else
-              region=""
-            fi
-
-            # 只保留 JP KR SG（不区分大小写），彻底去除 HK 及其他
-            if [[ -n "$region" ]]; then
-              region_upper=$(echo "$region" | tr '[:lower:]' '[:upper:]')
-              if [[ "$region_upper" == *"JP"* || "$region_upper" == *"KR"* || "$region_upper" == *"SG"* ]]; then
-                echo "${ip_port}#${region_upper}" >> clean-ip.txt
-                count=$((count + 1))
+            if [[ $lines -gt 0 ]]; then
+              if [[ $lines -le 5 ]]; then
+                cat "${country}.txt" >> clean-ip.txt
+                echo "   → 全部保留 $lines 个"
+              else
+                shuf -n 5 "${country}.txt" >> clean-ip.txt
+                echo "   → 随机抽取 5 个"
               fi
+              taken=$(( lines > 5 ? 5 : lines ))
+              total=$((total + taken))
+            else
+              echo "   → 该国家暂无可用 IP"
             fi
-          done < raw-ip.txt
+          done
 
-          echo "过滤完成！共保留 $count 行纯净 IP（仅 #JP #KR #SG）。"
-          echo "前 10 行预览："
-          if [[ -s clean-ip.txt ]]; then
-            head -n 10 clean-ip.txt
-          else
-            echo "（暂无符合条件的 IP）"
-          fi
+          echo "✅ 提取完成！最终共 $total 个 IP（目标 20 个）"
+          echo "📋 最终 IP 列表预览："
+          cat clean-ip.txt || echo "（无 IP）"
+
+          # 清理临时文件
+          rm -f raw*.txt *.txt 2>/dev/null || true
 
       - name: 提交并推送 clean-ip.txt
         run: |
@@ -69,9 +96,9 @@ jobs:
           git add clean-ip.txt
 
           if git diff --staged --quiet; then
-            echo "文件没有变化，跳过提交。"
+            echo "📌 文件无变化，跳过提交。"
           else
-            git commit -m "chore: update clean-ip.txt (pure #JP #KR #SG only) $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "chore: update clean-ip.txt (random 5 per country - total ~20) $(date +'%Y-%m-%d %H:%M:%S UTC')"
             git push
-            echo "✅ clean-ip.txt 已更新为最干净格式并推送！"
+            echo "🎉 clean-ip.txt 已更新并推送！"
           fi
