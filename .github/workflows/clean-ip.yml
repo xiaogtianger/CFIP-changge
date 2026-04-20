@@ -1,4 +1,4 @@
-name: Clean & Filter IP List (Random 5 per Country - Total 25)
+name: Clean & Filter IP List (Best 5 per Country by Speed)
 
 on:
   schedule:
@@ -17,18 +17,17 @@ jobs:
         with:
           ref: main
 
-      - name: 下载并按国家随机提取 5 个 IP（共 25 个 + 去重）
+      - name: 下载并按速度优选每个国家 5 个 IP
         run: |
           echo "🚀 开始下载所有 IP 来源..."
 
-          # 下载来源
           curl -s -f -L https://raw.githubusercontent.com/chris202010/yxip/refs/heads/main/ip.txt -o raw1.txt || true
           curl -s -f -L https://raw.githubusercontent.com/zhangtaile/bestIP/refs/heads/main/ipinfo.txt -o raw2.txt || true
           curl -s -f -L https://raw.githubusercontent.com/Fido6/bestip/refs/heads/dtaa/bestiphk.txt -o raw3.txt || true
 
-          echo "🔍 开始过滤并按国家分组..."
+          echo "🔍 提取 IP 并解析延迟..."
 
-          > all_filtered.txt
+          > all_with_speed.txt
 
           for file in raw*.txt; do
             [ ! -s "$file" ] && continue
@@ -47,52 +46,56 @@ jobs:
                 gsub(/-[0-9]+$/, "", region_part)
 
                 region = toupper(region_part)
+                if (region !~ /^(JP|KR|SG|HK|US)$/) next
 
-                if (region ~ /^(JP|KR|SG|HK|US)$/) {
-                  print ip_port "#" region
+                # 尝试提取延迟 (ms)
+                speed = 9999  # 默认值（越小越快）
+                match($0, /([0-9]+\.?[0-9]*)[[:space:]]*ms/)
+                if (RSTART > 0) {
+                  speed = substr($0, RSTART, RLENGTH-2) + 0
                 }
+
+                print ip_port "#" region "#" speed
               }
-            ' "$file" >> all_filtered.txt
+            ' "$file" >> all_with_speed.txt
           done
 
-          # === 全局去重（相同 IP:端口 只保留一条）===
-          echo "🧹 正在进行全局去重..."
-          sort -u all_filtered.txt -o all_filtered.txt
+          # 全局去重（相同 IP:端口 保留延迟最小的）
+          sort -t'#' -k1,1 -k3,3n all_with_speed.txt | awk -F'#' '!seen[$1]++' > deduped.txt
 
-          echo "🎲 按国家随机抽取 5 个 IP（目标总数 25）..."
+          echo "🎯 按国家优选最快的 5 个 IP..."
 
-          # 创建输出目录
           mkdir -p best-ips
-
           > best-ips/clean-ip.txt
           total=0
 
           for country in JP KR SG HK US; do
-            grep "#$country$" all_filtered.txt > "${country}.txt" 2>/dev/null || true
+            grep "#$country#" deduped.txt > "${country}.txt" 2>/dev/null || true
             lines=$(wc -l < "${country}.txt" 2>/dev/null || echo 0)
-            
+
             echo "📊 $country: 找到 $lines 个可用 IP"
 
             if [[ $lines -gt 0 ]]; then
-              if [[ $lines -le 5 ]]; then
-                cat "${country}.txt" >> best-ips/clean-ip.txt
-                echo "   → 全部保留 $lines 个"
-              else
-                shuf -n 5 "${country}.txt" >> best-ips/clean-ip.txt
-                echo "   → 随机抽取 5 个"
-              fi
-              taken=$(( lines > 5 ? 5 : lines ))
+              # 按速度排序（从小到大）并取前 5 个
+              sort -t'#' -k3,3n "${country}.txt" | head -n 5 > "${country}_top5.txt"
+              
+              cat "${country}_top5.txt" >> best-ips/clean-ip.txt
+              taken=$(wc -l < "${country}_top5.txt")
               total=$((total + taken))
+              echo "   → 优选最快 $taken 个"
             else
               echo "   → 该国家暂无可用 IP"
             fi
           done
 
-          echo "✅ 提取完成！最终共 $total 个 IP（目标 25 个）"
-          echo "📋 最终 IP 列表预览："
-          cat best-ips/clean-ip.txt || echo "（无 IP）"
+          # 最终输出只保留 IP#国家 格式，并按国家顺序 + 速度排序
+          awk -F'#' '{print $1 "#" $2}' best-ips/clean-ip.txt > best-ips/clean-ip.txt.tmp
+          mv best-ips/clean-ip.txt.tmp best-ips/clean-ip.txt
 
-          # 清理临时文件
+          echo "✅ 提取完成！最终共 $total 个最优 IP"
+          echo "📋 最终列表（已按国家 + 速度排序）："
+          cat best-ips/clean-ip.txt
+
           rm -f raw*.txt *.txt 2>/dev/null || true
 
       - name: 提交并推送 best-ips/clean-ip.txt
@@ -105,7 +108,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "📌 文件无变化，跳过提交。"
           else
-            git commit -m "chore: update best-ips/clean-ip.txt (random 5 per country - total ~25 + dedup) $(date +'%Y-%m-%d %H:%M:%S UTC')"
+            git commit -m "chore: update best-ips/clean-ip.txt (best 5 per country by speed) $(date +'%Y-%m-%d %H:%M:%S UTC')"
             git push
             echo "🎉 best-ips/clean-ip.txt 已更新并推送！"
           fi
