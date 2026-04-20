@@ -1,4 +1,4 @@
-name: Clean & Filter IP List (Best 5 by Speed or Random 3)
+name: Clean & Filter IP List (Best 10 by Speed or Random 8)
 
 on:
   schedule:
@@ -17,7 +17,7 @@ jobs:
         with:
           ref: main
 
-      - name: 下载并智能优选 IP（有速度取5个，无速度随机3个）
+      - name: 下载并智能优选 IP（有速度取10个，无速度随机8个）
         run: |
           echo "🚀 开始下载所有 IP 来源..."
 
@@ -82,20 +82,20 @@ jobs:
               has_speed=$(awk -F'#' '$3 < 9999' "${country}.txt" | wc -l)
 
               if [[ $has_speed -gt 0 ]]; then
-                # 有速度 → 取最快 5 个
-                sort -t'#' -k3,3n "${country}.txt" | head -n 5 >> best-ips/clean-ip.txt
-                taken=5
-                echo "   → 有测速数据，取最快 5 个"
+                # 有速度 → 取最快 10 个
+                sort -t'#' -k3,3n "${country}.txt" | head -n 10 >> best-ips/clean-ip.txt
+                taken=10
+                echo "   → 有测速数据，取最快 10 个"
               else
-                # 无速度 → 随机取 3 个
-                if [[ $lines -le 3 ]]; then
+                # 无速度 → 随机取 8 个
+                if [[ $lines -le 8 ]]; then
                   cat "${country}.txt" >> best-ips/clean-ip.txt
                   taken=$lines
                   echo "   → 无测速数据，全部保留 $taken 个"
                 else
-                  shuf -n 3 "${country}.txt" >> best-ips/clean-ip.txt
-                  taken=3
-                  echo "   → 无测速数据，随机抽取 3 个"
+                  shuf -n 8 "${country}.txt" >> best-ips/clean-ip.txt
+                  taken=8
+                  echo "   → 无测速数据，随机抽取 8 个"
                 fi
               fi
               total=$((total + taken))
@@ -124,7 +124,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "📌 文件无变化，跳过提交。"
           else
-            git commit -m "chore: update best-ips/clean-ip.txt (best 5 by speed or random 3 + TW) $(date +'%Y-%m-%d %H:%M:%S UTC')"
+            git commit -m "chore: update best-ips/clean-ip.txt (best 10 by speed or random 8 + TW) $(date +'%Y-%m-%d %H:%M:%S UTC')"
             git push
             echo "🎉 best-ips/clean-ip.txt 已更新并推送！"
           fi
