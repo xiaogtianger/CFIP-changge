@@ -46,7 +46,7 @@ jobs:
                 gsub(/-[0-9]+$/, "", region_part)
 
                 region = toupper(region_part)
-                if (region !~ /^(JP|KR|SG|HK|US|TW)$/) next
+                if (region !~ /^(JP|KR|SG|US)$/) next
 
                 # 智能提取延迟
                 speed = 9999
@@ -72,7 +72,7 @@ jobs:
           > best-ips/clean-ip.txt
           total=0
 
-          for country in JP KR SG HK US TW; do
+          for country in JP KR SG US; do
             grep "#$country#" deduped.txt > "${country}.txt" 2>/dev/null || true
             lines=$(wc -l < "${country}.txt" 2>/dev/null || echo 0)
 
@@ -124,7 +124,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "📌 文件无变化，跳过提交。"
           else
-            git commit -m "chore: update best-ips/clean-ip.txt (best 10 by speed or random 8 + TW) $(date +'%Y-%m-%d %H:%M:%S UTC')"
+            git commit -m "chore: update best-ips/clean-ip.txt (best 10 by speed or random 8) $(date +'%Y-%m-%d %H:%M:%S UTC')"
             git push
             echo "🎉 best-ips/clean-ip.txt 已更新并推送！"
           fi
