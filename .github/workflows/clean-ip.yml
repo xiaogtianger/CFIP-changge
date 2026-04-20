@@ -40,12 +40,15 @@ jobs:
                 ip_port = $1
                 gsub(/^[[:space:]]+|[[:space:]]+$/, "", ip_port)
 
+                # 改进地区提取：更宽松，兼容带空格、城市名的情况
                 region_part = (NF >= 2) ? $2 : ""
                 gsub(/^[[:space:]]+|[[:space:]]+$/, "", region_part)
                 gsub(/\|.*/, "", region_part)
-                gsub(/-[0-9]+$/, "", region_part)
+                gsub(/[-0-9]+$/, "", region_part)          # 去掉 -1、-20 等
+                gsub(/[[:space:]].*$/, "", region_part)    # 去掉空格后面的内容（如城市名）
 
                 region = toupper(region_part)
+
                 if (region !~ /^(JP|KR|SG|US)$/) next
 
                 # 智能提取延迟
@@ -82,12 +85,10 @@ jobs:
               has_speed=$(awk -F'#' '$3 < 9999' "${country}.txt" | wc -l)
 
               if [[ $has_speed -gt 0 ]]; then
-                # 有速度 → 取最快 10 个
                 sort -t'#' -k3,3n "${country}.txt" | head -n 10 >> best-ips/clean-ip.txt
                 taken=10
                 echo "   → 有测速数据，取最快 10 个"
               else
-                # 无速度 → 随机取 8 个
                 if [[ $lines -le 8 ]]; then
                   cat "${country}.txt" >> best-ips/clean-ip.txt
                   taken=$lines
@@ -104,7 +105,7 @@ jobs:
             fi
           done
 
-          # 最终清理格式：IP:port#地区
+          # 最终格式清理
           awk -F'#' '{print $1 "#" $2}' best-ips/clean-ip.txt > best-ips/clean-ip.txt.tmp
           mv best-ips/clean-ip.txt.tmp best-ips/clean-ip.txt
 
