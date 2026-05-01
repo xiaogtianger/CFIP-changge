@@ -17,7 +17,7 @@ jobs:
         with:
           ref: main
 
-      - name: 下载并智能优选 IP（排除 1. 103. 129. 175. 整个网段）
+      - name: 下载并智能优选 IP（排除多个完整网段）
         run: |
           echo "🚀 开始下载所有 IP 来源..."
 
@@ -25,7 +25,7 @@ jobs:
           curl -s -f -L https://raw.githubusercontent.com/zhangtaile/bestIP/refs/heads/main/ipinfo.txt -o raw2.txt || true
           curl -s -f -L https://raw.githubusercontent.com/Fido6/bestip/refs/heads/dtaa/bestiphk.txt -o raw3.txt || true
 
-          echo "🔍 提取 IP 并解析延迟（已排除 1.、103.、129.、175. 整个网段）..."
+          echo "🔍 提取 IP 并解析延迟（排除 1. 3. 13. 103. 123. 129. 175. 整个网段）..."
 
           > all_with_speed.txt
 
@@ -41,15 +41,17 @@ jobs:
                 ip_port = $1
                 gsub(/^[[:space:]]+|[[:space:]]+$/, "", ip_port)
 
-                # ==================== 排除整个网段 ====================
-                # 排除以下四个完整网段（第一段为这些数字）
-                if (ip_port ~ /^1\./)    { next }   # 全部 1. 网段 (1.0.0.0/8)
-                if (ip_port ~ /^103\./)  { next }   # 全部 103. 网段
-                if (ip_port ~ /^129\./)  { next }   # 全部 129. 网段
-                if (ip_port ~ /^175\./)  { next }   # 全部 175. 网段
+                # ==================== 排除以下完整网段 ====================
+                if (ip_port ~ /^1\./)    { next }   # 1.   网段
+                if (ip_port ~ /^3\./)    { next }   # 3.   网段
+                if (ip_port ~ /^13\./)   { next }   # 13.  网段
+                if (ip_port ~ /^103\./)  { next }   # 103. 网段
+                if (ip_port ~ /^123\./)  { next }   # 123. 网段
+                if (ip_port ~ /^129\./)  { next }   # 129. 网段
+                if (ip_port ~ /^175\./)  { next }   # 175. 网段
                 # =========================================================
 
-                # 提取地区（仅保留 JP、KR、SG、US）
+                # 提取地区（仅保留 JP KR SG US）
                 region_part = (NF >= 2) ? $2 : ""
                 gsub(/^[[:space:]]+|[[:space:]]+$/, "", region_part)
                 gsub(/\|.*/, "", region_part)
@@ -120,7 +122,7 @@ jobs:
           awk -F'#' '{print $1 "#" $2}' best-ips/clean-ip.txt > best-ips/clean-ip.txt.tmp
           mv best-ips/clean-ip.txt.tmp best-ips/clean-ip.txt
 
-          echo "✅ 完成！最终共 $total 个 IP（已排除 1.、103.、129.、175. 整个网段）"
+          echo "✅ 完成！最终共 $total 个 IP（已排除 1. 3. 13. 103. 123. 129. 175. 网段）"
           echo "📋 最终列表预览："
           cat best-ips/clean-ip.txt
 
@@ -135,7 +137,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "📌 文件无变化，跳过提交。"
           else
-            git commit -m "chore: update best-ips/clean-ip.txt (exclude 1. 103. 129. 175. full segments) $(date +'%Y-%m-%d %H:%M:%S UTC')"
+            git commit -m "chore: update best-ips/clean-ip.txt (exclude 1. 3. 13. 103. 123. 129. 175.) $(date +'%Y-%m-%d %H:%M:%S UTC')"
             git push
             echo "🎉 best-ips/clean-ip.txt 已更新并推送！"
           fi
